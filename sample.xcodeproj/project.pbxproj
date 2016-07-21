@@ -200,7 +200,10 @@
 					/usr/X11R6/include,
 				);
 				LIBRARY_SEARCH_PATHS = /usr/local/lib;
-				OTHER_LDFLAGS = "-lSDL2";
+				OTHER_LDFLAGS = (
+					"-lSDL2",
+					"-lSDL2_gfx",
+				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Debug;
@@ -213,7 +216,10 @@
 					/usr/X11R6/include,
 				);
 				LIBRARY_SEARCH_PATHS = /usr/local/lib;
-				OTHER_LDFLAGS = "-lSDL2";
+				OTHER_LDFLAGS = (
+					"-lSDL2",
+					"-lSDL2_gfx",
+				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Release;
