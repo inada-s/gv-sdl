@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		283CEA631D3EAB1B0063293F /* main.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 283CEA621D3EAB1B0063293F /* main.cpp */; };
+		284541FD1D5A8935004E4B50 /* sub.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 284541FC1D5A8935004E4B50 /* sub.cpp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -24,6 +25,7 @@
 
 /* Begin PBXFileReference section */
 		283CEA621D3EAB1B0063293F /* main.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = main.cpp; sourceTree = "<group>"; };
+		284541FC1D5A8935004E4B50 /* sub.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = sub.cpp; sourceTree = "<group>"; };
 		287E5F831D3EAB5300B43FD3 /* sample */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = sample; sourceTree = BUILT_PRODUCTS_DIR; };
 		28CF748A1D3EB1F90006DFC0 /* gv.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = gv.hpp; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -42,6 +44,7 @@
 		2811BE3A1D3EAAD5007BB31B = {
 			isa = PBXGroup;
 			children = (
+				284541FC1D5A8935004E4B50 /* sub.cpp */,
 				283CEA621D3EAB1B0063293F /* main.cpp */,
 				28CF748A1D3EB1F90006DFC0 /* gv.hpp */,
 				287E5F831D3EAB5300B43FD3 /* sample */,
@@ -104,6 +107,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				284541FD1D5A8935004E4B50 /* sub.cpp in Sources */,
 				283CEA631D3EAB1B0063293F /* main.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -196,13 +200,16 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				HEADER_SEARCH_PATHS = (
-					/usr/local/include/SDL2,
+					/usr/local/include,
 					/usr/X11R6/include,
 				);
 				LIBRARY_SEARCH_PATHS = /usr/local/lib;
 				OTHER_LDFLAGS = (
 					"-lSDL2",
+					"-lSDL2_ttf",
 					"-lSDL2_gfx",
+					"-framework",
+					OpenGL,
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
@@ -212,13 +219,16 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				HEADER_SEARCH_PATHS = (
-					/usr/local/include/SDL2,
+					/usr/local/include,
 					/usr/X11R6/include,
 				);
 				LIBRARY_SEARCH_PATHS = /usr/local/lib;
 				OTHER_LDFLAGS = (
 					"-lSDL2",
+					"-lSDL2_ttf",
 					"-lSDL2_gfx",
+					"-framework",
+					OpenGL,
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
