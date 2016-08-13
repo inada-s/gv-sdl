@@ -105,13 +105,12 @@ struct RenderArgs {
   int screen_width, screen_height;
 
   Point<T> trans(Point<T> p) const {
-    Point<T> q;
-    q.x = s_base_x + lround((p.x - v_base_x) * scale);
-    q.y = s_base_y + lround((p.y - v_base_y) * scale);
-    return q;
+    p.y *= -1;
+    return p;
   }
 
-  T trans(T r) const { return lround(r * scale); }
+  // T trans(T r) const { return lround(r * scale); }
+  T trans(T r) const { return r; }
 };
 
 template <class T>
@@ -120,9 +119,9 @@ struct GvPolygonItem {
   GvColor c;
 
   T MinX() const { return *std::min_element(begin(vx), end(vx)); }
-  T MinY() const { return *std::min_element(begin(vy), end(vy)); }
+  T MinY() const { return -*std::max_element(begin(vy), end(vy)); }
   T MaxX() const { return *std::max_element(begin(vx), end(vx)); }
-  T MaxY() const { return *std::max_element(begin(vy), end(vy)); }
+  T MaxY() const { return -*std::min_element(begin(vy), end(vy)); }
 
   template <typename Writer>
   void WriteTo(Writer& w) {
@@ -199,78 +198,60 @@ struct GvTextItem {
     col.g = c.g;
     col.b = c.b;
     col.a = c.a;
+
+    int text_w;
+    int text_h;
+    TTF_SizeUTF8(r.font, text.c_str(), &text_w, &text_h);
     SDL_Surface* surface = TTF_RenderUTF8_Blended(r.font, text.c_str(), col);
     if (surface == nullptr) return;
     GLuint texId;
-    glEnable(GL_TEXTURE_2D);
     glGenTextures(1, &texId);
     glBindTexture(GL_TEXTURE_2D, texId);
-
-    auto center = r.trans(Point<double>(x, y));
 
     int w = power_two_floor(surface->w) * 2;
     int h = power_two_floor(surface->h) * 2;
 
     SDL_Surface* s = SDL_CreateRGBSurface(0, w, h, 32, 0x00ff0000, 0x0000ff00,
                                           0x000000ff, 0xff000000);
-    SDL_BlitSurface(surface, NULL, s, NULL);
+    SDL_Rect blit_rect;
+    blit_rect.x = blit_rect.y = 0;
+    blit_rect.w = surface->w;
+    blit_rect.h = surface->h;
+    SDL_Rect blit2_rect;
+    blit2_rect.x = (w - surface->w) / 2.0;
+    blit2_rect.y = (h - surface->h) / 2.0;
+    blit2_rect.w = surface->w;
+    blit2_rect.h = surface->h;
+
+    SDL_BlitSurface(surface, &blit_rect, s, &blit2_rect);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE,
                  s->pixels);
     glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+
+    auto center = r.trans(Point<double>(x, y));
+    double scale = this->r / surface->h;
+    double ux = center.x + (w * scale * 0.5);
+    double uy = center.y - (h * scale * 0.5);
+    double lx = center.x - (w * scale * 0.5);
+    double ly = center.y + (h * scale * 0.5);
+    glEnable(GL_TEXTURE_2D);
     glBegin(GL_QUADS);
     {
-      glTexCoord2d(0, 1);
-      glVertex2f(center.x - surface->w * this->r / 2.0,
-                 center.y + surface->h * this->r / 2.0);
-      glTexCoord2d(1, 1);
-      glVertex2f(center.x + surface->w * this->r / 2.0,
-                 center.y + surface->h * this->r / 2.0);
-      glTexCoord2d(1, 0);
-      glVertex2f(center.x + surface->w * this->r / 2.0,
-                 center.y - surface->h * this->r / 2.0);
       glTexCoord2d(0, 0);
-      glVertex2f(center.x - surface->w * this->r / 2.0,
-                 center.y - surface->h * this->r / 2.0);
+      glVertex2d(lx, ly);
+      glTexCoord2d(1, 0);
+      glVertex2d(ux, ly);
+      glTexCoord2d(1, 1);
+      glVertex2d(ux, uy);
+      glTexCoord2d(0, 1);
+      glVertex2d(lx, uy);
     }
     glEnd();
     glDisable(GL_TEXTURE_2D);
-
-    // Cleanup
     SDL_FreeSurface(s);
     SDL_FreeSurface(surface);
     glDeleteTextures(1, &texId);
-
-    /*
-
-        SDL_Rect area;
-        area.x = 0;
-        area.y = 0;
-        area.w = surface->w;
-        area.h = surface->h;
-        SDL_Surface* temp =
-            SDL_CreateRGBSurface(0, surface->w, surface->h, 32, 0x000000ff,
-                                 0x0000ff00, 0x00ff0000, 0x000000ff);
-        SDL_BlitSurface(surface, &area, temp, NULL);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, surface->w, surface->h, 0,
-       GL_RGBA,
-                     GL_UNSIGNED_BYTE, temp->pixels);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glBegin(GL_QUADS);
-        {
-          glTexCoord2i(0, 0);
-          glVertex3f(0, 0, 0);
-          glTexCoord2i(1, 0);
-          glVertex3f(0 + surface->w, 0, 0);
-          glTexCoord2i(1, 1);
-          glVertex3f(0 + surface->w, 0 + surface->h, 0);
-          glTexCoord2i(0, 1);
-          glVertex3f(0, 0 + surface->h, 0);
-        }
-        glEnd();
-        glDisable(GL_TEXTURE_2D);
-         */
   }
 };
 
@@ -281,9 +262,9 @@ struct GvCircleItem {
   GvColor c;
 
   T MinX() const { return p.x - r; }
-  T MinY() const { return p.y - r; }
+  T MinY() const { return -p.y - r; }
   T MaxX() const { return p.x + r; }
-  T MaxY() const { return p.y + r; }
+  T MaxY() const { return -p.y + r; }
 
   void Render(const RenderArgs<T>& r) const {
     const auto q = r.trans(p);
@@ -552,18 +533,20 @@ class GvCore {
     renderer = SDL_CreateRenderer(
         window, -1, SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_ACCELERATED);
 
-    glOrtho(0, screen_width, 0, screen_height, 0, 16);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glLoadIdentity();
     // glBlendFunc(GL_SRC_COLOR, GL_ONE_MINUS_SRC_ALPHA);
   }
 
   bool FontCheck() {
     if (!font && !font_path().empty())
-      font = TTF_OpenFont("/Users/shingo/projects/gv-sdl/MTLmr3m.ttf", 24);
+      font = TTF_OpenFont("/Users/shingo/projects/gv-sdl/MTLmr3m.ttf", 64);
     return font != nullptr;
   }
+
+  GvPolygonItem<double> polygon_item;
+  GvCircleItem<double> circle_item;
+  GvTextItem<double> text_item;
 
   void MainLoop() {
     bool running = true;
@@ -577,6 +560,8 @@ class GvCore {
     render_args.screen_width = screen_width;
     render_args.screen_height = screen_height;
 
+    BoundingBox<double> content_box;
+
     while (running) {
       SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
       SDL_RenderClear(renderer);
@@ -589,14 +574,10 @@ class GvCore {
 
       double vis_time = 0;
 
-      GvPolygonItem<double> polygon_item;
-      GvCircleItem<double> circle_item;
-      GvTextItem<double> text_item;
       FontCheck();
       render_args.font = font;
 
       mtx.lock();
-      BoundingBox<double> content_box;
       BinaryReader reader(commands, vis_base_index);
 
       bool visit_t = false;
@@ -640,14 +621,19 @@ class GvCore {
       render_args.s_base_y = (height - content_h * render_args.scale) / 2;
 
       mtx.unlock();
-
       SDL_RenderPresent(renderer);
+
+      double swidth = content_w * render_args.scale;
+      double sheight = content_h * render_args.scale;
+      double sbasex = (width - swidth) / 2;
+      double sbasey = (height - sheight) / 2;
+      glViewport(sbasex, sbasey, swidth, sheight);
+      glLoadIdentity();
+      glOrtho(content_box.lx, content_box.ux, content_box.ly, content_box.uy, 0,
+              16);
     }
     SDL_Quit();
   }
-
- public:
-  void hoge() {}
 };
 }  // namespace gv_internal
 
