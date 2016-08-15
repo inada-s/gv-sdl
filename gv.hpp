@@ -479,9 +479,10 @@ class GvCore {
  private:
   std::mutex mtx;
   std::vector<char> commands;
+  std::vector<int> time_index;
   std::vector<char> buffer;
   int num_of_time = 0;
-  int vis_base_index = 0;
+  int vis_time_index = 0;
   double buffer_time = 0;
   bool flushed = false;
 
@@ -491,13 +492,17 @@ class GvCore {
   TTF_Font* font = nullptr;
   uint8_t default_alpha_ = 0xFF;
   std::string font_path_;
+  bool auto_mode_ = true;
   int screen_width = 0, screen_height = 0;
 
   void FlushLocked() {
     if (buffer.empty()) {
       return;
     }
-    vis_base_index = static_cast<int>(commands.size());
+    if (auto_mode_) {
+      vis_time_index = static_cast<int>(time_index.size());
+    }
+    time_index.push_back(static_cast<int>(commands.size()));
     commands.insert(commands.end(), std::make_move_iterator(buffer.begin()),
                     std::make_move_iterator(buffer.end()));
     buffer.clear();
@@ -570,6 +575,35 @@ class GvCore {
         if (ev.type == SDL_QUIT) {
           running = false;
         }
+        if (ev.type == SDL_KEYDOWN) {
+          switch (ev.key.keysym.sym) {
+            case SDLK_UP:
+              std::cerr << "UP" << std::endl;
+              break;
+            case SDLK_DOWN:
+              std::cerr << "DOWN" << std::endl;
+              break;
+            case SDLK_RIGHT:
+              std::cerr << "RIGHT" << std::endl;
+              if (vis_time_index + 1 < time_index.size()) {
+                vis_time_index++;
+                auto_mode_ = false;
+              }
+              break;
+            case SDLK_LEFT:
+              std::cerr << "LEFT" << std::endl;
+              if (vis_time_index - 1 >= 0) {
+                vis_time_index--;
+                auto_mode_ = false;
+              }
+              break;
+            case SDLK_ESCAPE:
+              running = false;
+              break;
+            default:
+              break;
+          }
+        }
       }
 
       double vis_time = 0;
@@ -578,7 +612,7 @@ class GvCore {
       render_args.font = font;
 
       mtx.lock();
-      BinaryReader reader(commands, vis_base_index);
+      BinaryReader reader(commands, time_index[vis_time_index]);
 
       bool visit_t = false;
       while (reader.pos() < commands.size()) {
