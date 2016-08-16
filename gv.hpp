@@ -1,7 +1,6 @@
 #pragma once
 
 #include <SDL2/SDL.h>
-// #include <SDL2_gfxPrimitives.h>
 #include <SDL2/SDL_opengl.h>
 #include <SDL2/SDL_ttf.h>
 
@@ -99,18 +98,6 @@ template <class T>
 struct RenderArgs {
   SDL_Renderer* renderer;
   TTF_Font* font;
-  double scale;
-  double v_base_x, v_base_y;
-  double s_base_x, s_base_y;
-  int screen_width, screen_height;
-
-  Point<T> trans(Point<T> p) const {
-    p.y *= -1;
-    return p;
-  }
-
-  // T trans(T r) const { return lround(r * scale); }
-  T trans(T r) const { return r; }
 };
 
 template <class T>
@@ -119,9 +106,9 @@ struct GvPolygonItem {
   GvColor c;
 
   T MinX() const { return *std::min_element(begin(vx), end(vx)); }
-  T MinY() const { return -*std::max_element(begin(vy), end(vy)); }
+  T MinY() const { return *std::min_element(begin(vy), end(vy)); }
   T MaxX() const { return *std::max_element(begin(vx), end(vx)); }
-  T MaxY() const { return -*std::min_element(begin(vy), end(vy)); }
+  T MaxY() const { return *std::max_element(begin(vy), end(vy)); }
 
   template <typename Writer>
   void WriteTo(Writer& w) {
@@ -148,8 +135,7 @@ struct GvPolygonItem {
     glColor4f(c.r / 256.0, c.g / 256.0, c.b / 256.0, c.a / 256.0);
     glBegin(GL_POLYGON);
     for (int i = 0; i < n; ++i) {
-      const auto q = r.trans(Point<T>(vx[i], vy[i]));
-      glVertex2d(q.x, q.y);
+      glVertex2d(vx[i], vy[i]);
     }
     glEnd();
   }
@@ -199,9 +185,6 @@ struct GvTextItem {
     col.b = c.b;
     col.a = c.a;
 
-    int text_w;
-    int text_h;
-    TTF_SizeUTF8(r.font, text.c_str(), &text_w, &text_h);
     SDL_Surface* surface = TTF_RenderUTF8_Blended(r.font, text.c_str(), col);
     if (surface == nullptr) return;
     GLuint texId;
@@ -229,7 +212,7 @@ struct GvTextItem {
     glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 
-    auto center = r.trans(Point<double>(x, y));
+    auto center = Point<double>(x, y);
     double scale = this->r / surface->h;
     double ux = center.x + (w * scale * 0.5);
     double uy = center.y - (h * scale * 0.5);
@@ -239,13 +222,13 @@ struct GvTextItem {
     glBegin(GL_QUADS);
     {
       glTexCoord2d(0, 0);
-      glVertex2d(lx, ly);
-      glTexCoord2d(1, 0);
-      glVertex2d(ux, ly);
-      glTexCoord2d(1, 1);
-      glVertex2d(ux, uy);
-      glTexCoord2d(0, 1);
       glVertex2d(lx, uy);
+      glTexCoord2d(1, 0);
+      glVertex2d(ux, uy);
+      glTexCoord2d(1, 1);
+      glVertex2d(ux, ly);
+      glTexCoord2d(0, 1);
+      glVertex2d(lx, ly);
     }
     glEnd();
     glDisable(GL_TEXTURE_2D);
@@ -267,16 +250,13 @@ struct GvCircleItem {
   T MaxY() const { return -p.y + r; }
 
   void Render(const RenderArgs<T>& r) const {
-    const auto q = r.trans(p);
-    const auto s = r.trans(this->r);
     const auto n = 64;
     glColor4f(c.r / 256.0, c.g / 256.0, c.b / 256.0, c.a / 256.0);
-    // glLoadIdentity();
     glBegin(GL_POLYGON);
     for (int i = 0; i < n; i++) {
       const auto rate = (double)i / n;
-      const auto x = q.x + s * cos(2.0 * M_PI * rate);
-      const auto y = q.y + s * sin(2.0 * M_PI * rate);
+      const auto x = p.x + this->r * cos(2.0 * M_PI * rate);
+      const auto y = p.y + this->r * sin(2.0 * M_PI * rate);
       glVertex2d(x, y);
     }
     glEnd();
@@ -493,21 +473,10 @@ class GvCore {
   uint8_t default_alpha_ = 0xFF;
   std::string font_path_;
   bool auto_mode_ = true;
-  int screen_width = 0, screen_height = 0;
-
-  void FlushLocked() {
-    if (buffer.empty()) {
-      return;
-    }
-    if (auto_mode_) {
-      vis_time_index = static_cast<int>(time_index.size());
-    }
-    time_index.push_back(static_cast<int>(commands.size()));
-    commands.insert(commands.end(), std::make_move_iterator(buffer.begin()),
-                    std::make_move_iterator(buffer.end()));
-    buffer.clear();
-    flushed = true;
-  }
+  double zoom = 1.0;
+  BoundingBox<double> content_box;
+  RenderArgs<double> render_args;
+  Point<int> center;
 
   void Init() {
     if (initialized) return;
@@ -530,11 +499,11 @@ class GvCore {
     SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
     SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 16);
 
-    screen_width = 960;
-    screen_height = 640;
-    window = SDL_CreateWindow(
-        "Hey", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, screen_width,
-        screen_height, SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN);
+    center.x = 0;
+    center.y = 0;
+    window =
+        SDL_CreateWindow("Hey", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+                         960, 640, SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN);
     renderer = SDL_CreateRenderer(
         window, -1, SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_ACCELERATED);
 
@@ -549,23 +518,111 @@ class GvCore {
     return font != nullptr;
   }
 
-  GvPolygonItem<double> polygon_item;
-  GvCircleItem<double> circle_item;
-  GvTextItem<double> text_item;
+  void Zoom(int direction) {
+    if (direction == 0) return;
+    zoom = zoom * std::pow(0.5, direction * 0.080482023721841);
+    zoom = std::min(std::max(zoom, 1.0), 10.0);
+    UpdateCenter();
+  }
+
+  void FlushLocked() {
+    if (buffer.empty()) {
+      return;
+    }
+    if (auto_mode_) {
+      vis_time_index = static_cast<int>(time_index.size());
+    }
+    time_index.push_back(static_cast<int>(commands.size()));
+    commands.insert(commands.end(), std::make_move_iterator(buffer.begin()),
+                    std::make_move_iterator(buffer.end()));
+    buffer.clear();
+    flushed = true;
+  }
+
+  void UpdateCenter(int dx = 0, int dy = 0) {
+    center.x += dx;
+    center.y += dy;
+    int width, height;
+    SDL_GetWindowSize(window, &width, &height);
+    const auto content_w = content_box.ux - content_box.lx;
+    const auto content_h = content_box.uy - content_box.ly;
+    const auto scale = std::min(width / content_w, height / content_h);
+    const auto px = (width - content_w * scale) * 0.5;
+    const auto py = (height - content_h * scale) * 0.5;
+    auto ux = 0.5 * content_w * scale * (zoom - 1) - px;
+    auto lx = 0.5 * -content_w * scale * (zoom - 1) + px;
+    auto uy = 0.5 * content_h * scale * (zoom - 1) - py;
+    auto ly = 0.5 * -content_h * scale * (zoom - 1) + py;
+    if (ux < lx) ux = lx = 0;
+    if (uy < ly) uy = ly = 0;
+    center.x = std::round(std::max(std::min((double)center.x, ux), lx));
+    center.y = std::round(std::max(std::min((double)center.y, uy), ly));
+  }
+
+  void BeforeRender() {
+    render_args.font = font;
+
+    int width, height;
+    SDL_GetWindowSize(window, &width, &height);
+    const auto content_w = content_box.ux - content_box.lx;
+    const auto content_h = content_box.uy - content_box.ly;
+    double scale = std::min(width / content_w, height / content_h);
+
+    glMatrixMode(GL_PROJECTION);
+    glViewport(0, 0, width, height);
+
+    glLoadIdentity();
+    glOrtho(-width * 0.5, width * 0.5, height * 0.5, -height * 0.5, 0, 16);
+    glTranslated(center.x, center.y, 0);
+    glScaled(scale * zoom, scale * zoom, 1);
+    glTranslated(-content_box.lx - content_w * 0.5,
+                 -content_box.ly - content_h * 0.5, 0);
+  }
+
+  void Render() {
+    GvPolygonItem<double> polygon_item;
+    GvCircleItem<double> circle_item;
+    GvTextItem<double> text_item;
+
+    double vis_time = 0;
+    mtx.lock();
+    BinaryReader reader(commands, time_index[vis_time_index]);
+    bool visit_t = false;
+    while (reader.pos() < commands.size()) {
+      char cmd;
+      reader.Read(cmd);
+      if (cmd == 'n' && visit_t) {
+        break;
+      } else if (cmd == 'n') {
+        visit_t = true;
+        reader.Read(vis_time);
+      } else if (cmd == 'p') {
+        GvPolygonItem<double>::ReadFrom(reader, polygon_item);
+        content_box.Update(polygon_item);
+        polygon_item.Render(render_args);
+      } else if (cmd == 'c') {
+        reader.Read(circle_item);
+        content_box.Update(circle_item);
+        circle_item.Render(render_args);
+      } else if (cmd == 't') {
+        GvTextItem<double>::ReadFrom(reader, text_item);
+        if (font == nullptr) {
+          std::cerr << "no font" << std::endl;
+          continue;
+        }
+        content_box.Update(text_item);
+        text_item.Render(render_args);
+      } else {
+        std::cerr << "Unknown command" << std::endl;
+      }
+    }
+    mtx.unlock();
+    SDL_RenderPresent(renderer);
+  }
 
   void MainLoop() {
     bool running = true;
-    RenderArgs<double> render_args;
     render_args.renderer = renderer;
-    render_args.scale = 1.0;
-    render_args.s_base_x = 0.0;
-    render_args.s_base_y = 0.0;
-    render_args.v_base_x = 0.0;
-    render_args.v_base_y = 0.0;
-    render_args.screen_width = screen_width;
-    render_args.screen_height = screen_height;
-
-    BoundingBox<double> content_box;
 
     while (running) {
       SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
@@ -578,20 +635,18 @@ class GvCore {
         if (ev.type == SDL_KEYDOWN) {
           switch (ev.key.keysym.sym) {
             case SDLK_UP:
-              std::cerr << "UP" << std::endl;
+              Zoom(4);
               break;
             case SDLK_DOWN:
-              std::cerr << "DOWN" << std::endl;
+              Zoom(-4);
               break;
             case SDLK_RIGHT:
-              std::cerr << "RIGHT" << std::endl;
               if (vis_time_index + 1 < time_index.size()) {
                 vis_time_index++;
                 auto_mode_ = false;
               }
               break;
             case SDLK_LEFT:
-              std::cerr << "LEFT" << std::endl;
               if (vis_time_index - 1 >= 0) {
                 vis_time_index--;
                 auto_mode_ = false;
@@ -604,67 +659,26 @@ class GvCore {
               break;
           }
         }
-      }
-
-      double vis_time = 0;
-
-      FontCheck();
-      render_args.font = font;
-
-      mtx.lock();
-      BinaryReader reader(commands, time_index[vis_time_index]);
-
-      bool visit_t = false;
-      while (reader.pos() < commands.size()) {
-        char cmd;
-        reader.Read(cmd);
-        if (cmd == 'n' && visit_t) {
-          break;
-        } else if (cmd == 'n') {
-          visit_t = true;
-          reader.Read(vis_time);
-        } else if (cmd == 'p') {
-          GvPolygonItem<double>::ReadFrom(reader, polygon_item);
-          content_box.Update(polygon_item);
-          polygon_item.Render(render_args);
-        } else if (cmd == 'c') {
-          reader.Read(circle_item);
-          content_box.Update(circle_item);
-          circle_item.Render(render_args);
-        } else if (cmd == 't') {
-          GvTextItem<double>::ReadFrom(reader, text_item);
-          if (font == nullptr) {
-            std::cerr << "no font" << std::endl;
-            continue;
+        if (ev.type == SDL_MOUSEMOTION) {
+          if (SDL_GetMouseState(NULL, NULL)) {
+            UpdateCenter(ev.motion.xrel, ev.motion.yrel);
           }
-          content_box.Update(text_item);
-          text_item.Render(render_args);
-        } else {
-          std::cerr << "Unknown command" << std::endl;
+        }
+        if (ev.type == SDL_MOUSEWHEEL) {
+          if (ev.wheel.direction == SDL_MOUSEWHEEL_NORMAL) {
+            if (ev.wheel.y > 0) {
+              Zoom(1);
+            } else {
+              Zoom(-1);
+            }
+            std::cerr << "A" << ev.wheel.y << std::endl;
+          }
         }
       }
 
-      int width, height;
-      SDL_GetWindowSize(window, &width, &height);
-      const auto content_w = content_box.ux - content_box.lx;
-      const auto content_h = content_box.uy - content_box.ly;
-      render_args.scale = std::min(width / content_w, height / content_h);
-      render_args.v_base_x = content_box.lx;
-      render_args.v_base_y = content_box.ly;
-      render_args.s_base_x = (width - content_w * render_args.scale) / 2;
-      render_args.s_base_y = (height - content_h * render_args.scale) / 2;
-
-      mtx.unlock();
-      SDL_RenderPresent(renderer);
-
-      double swidth = content_w * render_args.scale;
-      double sheight = content_h * render_args.scale;
-      double sbasex = (width - swidth) / 2;
-      double sbasey = (height - sheight) / 2;
-      glViewport(sbasex, sbasey, swidth, sheight);
-      glLoadIdentity();
-      glOrtho(content_box.lx, content_box.ux, content_box.ly, content_box.uy, 0,
-              16);
+      FontCheck();
+      BeforeRender();
+      Render();
     }
     SDL_Quit();
   }
