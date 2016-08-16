@@ -1,9 +1,11 @@
 #pragma once
 
+#include <GL/glu.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_opengl.h>
 #include <SDL2/SDL_ttf.h>
 
+#include <assert.h>
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -17,6 +19,19 @@
 #include <vector>
 
 namespace gv_internal {
+
+inline unsigned next_power_of_two(unsigned v) {
+  assert(v > 0);
+  v--;
+  v |= v >> 1;
+  v |= v >> 2;
+  v |= v >> 4;
+  v |= v >> 8;
+  v |= v >> 16;
+  v++;
+  return v;
+}
+
 struct GvColor {
   uint8_t r;
   uint8_t g;
@@ -171,12 +186,6 @@ struct GvTextItem {
   T MaxX() const { return maxx; }
   T MaxY() const { return maxy; }
 
-  unsigned int power_two_floor(unsigned int val) {
-    unsigned int power = 2, nextVal = power * 2;
-    while ((nextVal *= 2) <= val) power *= 2;
-    return power * 2;
-  }
-
   void Render(const RenderArgs<T>& r) {
     // https://github.com/android/platform_frameworks_base/tree/master/data/fonts
     SDL_Color col;
@@ -191,8 +200,8 @@ struct GvTextItem {
     glGenTextures(1, &texId);
     glBindTexture(GL_TEXTURE_2D, texId);
 
-    int w = power_two_floor(surface->w) * 2;
-    int h = power_two_floor(surface->h) * 2;
+    const int w = next_power_of_two(surface->w);
+    const int h = next_power_of_two(surface->h);
 
     SDL_Surface* s = SDL_CreateRGBSurface(0, w, h, 32, 0x00ff0000, 0x0000ff00,
                                           0x000000ff, 0xff000000);
@@ -215,20 +224,20 @@ struct GvTextItem {
     auto center = Point<double>(x, y);
     double scale = this->r / surface->h;
     double ux = center.x + (w * scale * 0.5);
-    double uy = center.y - (h * scale * 0.5);
+    double uy = center.y + (h * scale * 0.5);
     double lx = center.x - (w * scale * 0.5);
-    double ly = center.y + (h * scale * 0.5);
+    double ly = center.y - (h * scale * 0.5);
     glEnable(GL_TEXTURE_2D);
     glBegin(GL_QUADS);
     {
       glTexCoord2d(0, 0);
-      glVertex2d(lx, uy);
-      glTexCoord2d(1, 0);
-      glVertex2d(ux, uy);
-      glTexCoord2d(1, 1);
-      glVertex2d(ux, ly);
-      glTexCoord2d(0, 1);
       glVertex2d(lx, ly);
+      glTexCoord2d(1, 0);
+      glVertex2d(ux, ly);
+      glTexCoord2d(1, 1);
+      glVertex2d(ux, uy);
+      glTexCoord2d(0, 1);
+      glVertex2d(lx, uy);
     }
     glEnd();
     glDisable(GL_TEXTURE_2D);
@@ -296,7 +305,6 @@ class GvCore {
     buffer.push_back('n');
     BinaryWriter(buffer).Write(buffer_time);
     buffer_time += 1.0;
-    num_of_time++;
     mtx.unlock();
   }
 
@@ -461,10 +469,8 @@ class GvCore {
   std::vector<char> commands;
   std::vector<int> time_index;
   std::vector<char> buffer;
-  int num_of_time = 0;
   int vis_time_index = 0;
   double buffer_time = 0;
-  bool flushed = false;
 
   bool initialized = false;
   SDL_Window* window = nullptr;
@@ -477,12 +483,12 @@ class GvCore {
   BoundingBox<double> content_box;
   RenderArgs<double> render_args;
   Point<int> center;
+  int window_width, window_height;
 
   void Init() {
     if (initialized) return;
     mtx.lock();
     buffer_time = 0;
-    num_of_time = 0;
 
     buffer.push_back('n');
     BinaryWriter(buffer).Write(buffer_time);
@@ -501,20 +507,19 @@ class GvCore {
 
     center.x = 0;
     center.y = 0;
-    window =
-        SDL_CreateWindow("Hey", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-                         960, 640, SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN);
+    window = SDL_CreateWindow("Visualizer", SDL_WINDOWPOS_CENTERED,
+                              SDL_WINDOWPOS_CENTERED, 960, 640,
+                              SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN);
     renderer = SDL_CreateRenderer(
         window, -1, SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_ACCELERATED);
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    // glBlendFunc(GL_SRC_COLOR, GL_ONE_MINUS_SRC_ALPHA);
   }
 
   bool FontCheck() {
     if (!font && !font_path().empty())
-      font = TTF_OpenFont("/Users/shingo/projects/gv-sdl/MTLmr3m.ttf", 64);
+      font = TTF_OpenFont(font_path().c_str(), 64);
     return font != nullptr;
   }
 
@@ -536,19 +541,17 @@ class GvCore {
     commands.insert(commands.end(), std::make_move_iterator(buffer.begin()),
                     std::make_move_iterator(buffer.end()));
     buffer.clear();
-    flushed = true;
   }
 
   void UpdateCenter(int dx = 0, int dy = 0) {
     center.x += dx;
     center.y += dy;
-    int width, height;
-    SDL_GetWindowSize(window, &width, &height);
     const auto content_w = content_box.ux - content_box.lx;
     const auto content_h = content_box.uy - content_box.ly;
-    const auto scale = std::min(width / content_w, height / content_h);
-    const auto px = (width - content_w * scale) * 0.5;
-    const auto py = (height - content_h * scale) * 0.5;
+    const auto scale =
+        std::min(window_width / content_w, window_height / content_h);
+    const auto px = (window_width - content_w * scale) * 0.5;
+    const auto py = (window_height - content_h * scale) * 0.5;
     auto ux = 0.5 * content_w * scale * (zoom - 1) - px;
     auto lx = 0.5 * -content_w * scale * (zoom - 1) + px;
     auto uy = 0.5 * content_h * scale * (zoom - 1) - py;
@@ -559,27 +562,111 @@ class GvCore {
     center.y = std::round(std::max(std::min((double)center.y, uy), ly));
   }
 
-  void BeforeRender() {
-    render_args.font = font;
+  // align_h: r is 0:center, 1:left 2:right
+  // align_v: r is 0:center, 1:top, 2:bottom
+  void RenderText(double x, double y, double r, int align_h, int align_v,
+                  GvColor c, const char* format = "?", ...) {
+    SDL_Color col;
+    col.r = c.r;
+    col.g = c.g;
+    col.b = c.b;
+    col.a = c.a;
 
-    int width, height;
-    SDL_GetWindowSize(window, &width, &height);
+    char buf[1024];
+    va_list arg;
+    va_start(arg, format);
+    auto size = vsnprintf(buf, 256, format, arg);
+    va_end(arg);
+    if (size < 0) return;
+
+    SDL_Surface* surface = TTF_RenderUTF8_Blended(font, buf, col);
+    if (surface == nullptr) return;
+    GLuint texId;
+    glGenTextures(1, &texId);
+    glBindTexture(GL_TEXTURE_2D, texId);
+
+    const int w = next_power_of_two(surface->w);
+    const int h = next_power_of_two(surface->h);
+
+    SDL_Surface* s = SDL_CreateRGBSurface(0, w, h, 32, 0x00ff0000, 0x0000ff00,
+                                          0x000000ff, 0xff000000);
+    SDL_Rect blit_rect;
+    blit_rect.x = blit_rect.y = 0;
+    blit_rect.w = surface->w;
+    blit_rect.h = surface->h;
+    SDL_Rect blit2_rect;
+    blit2_rect.x = (w - surface->w) * 0.5;
+    blit2_rect.y = (h - surface->h) * 0.5;
+    blit2_rect.w = surface->w;
+    blit2_rect.h = surface->h;
+
+    SDL_BlitSurface(surface, &blit_rect, s, &blit2_rect);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                 s->pixels);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+
+    auto center = Point<double>(x, y);
+    double scale = r / surface->h;
+    double lx = center.x - (w * scale * 0.5);
+    double ly = center.y - (h * scale * 0.5);
+    double ux = center.x + (w * scale * 0.5);
+    double uy = center.y + (h * scale * 0.5);
+    if (align_h == 1) {  // left
+      lx += surface->w * scale * 0.5;
+      ux += surface->w * scale * 0.5;
+    } else if (align_h == 2) {  // right
+      lx -= surface->w * scale * 0.5;
+      ux -= surface->w * scale * 0.5;
+    }
+    if (align_v == 1) {  // top
+      ly += surface->h * scale * 0.5;
+      uy += surface->h * scale * 0.5;
+    } else if (align_v == 2) {  // bottom
+      ly -= surface->h * scale * 0.5;
+      uy -= surface->h * scale * 0.5;
+    }
+
+    glEnable(GL_TEXTURE_2D);
+    glBegin(GL_QUADS);
+    {
+      glTexCoord2d(0, 0);
+      glVertex2d(lx, ly);
+      glTexCoord2d(1, 0);
+      glVertex2d(ux, ly);
+      glTexCoord2d(1, 1);
+      glVertex2d(ux, uy);
+      glTexCoord2d(0, 1);
+      glVertex2d(lx, uy);
+    }
+    glEnd();
+    glDisable(GL_TEXTURE_2D);
+    SDL_FreeSurface(s);
+    SDL_FreeSurface(surface);
+    glDeleteTextures(1, &texId);
+    glBindTexture(GL_TEXTURE_2D, 0);
+  }
+
+  void Render() {
+    render_args.font = font;
+    SDL_GetWindowSize(window, &window_width, &window_height);
+
     const auto content_w = content_box.ux - content_box.lx;
     const auto content_h = content_box.uy - content_box.ly;
-    double scale = std::min(width / content_w, height / content_h);
+    double scale =
+        std::min(window_width / content_w, window_height / content_h);
 
     glMatrixMode(GL_PROJECTION);
-    glViewport(0, 0, width, height);
+    glViewport(0, 0, window_width, window_height);
 
     glLoadIdentity();
-    glOrtho(-width * 0.5, width * 0.5, height * 0.5, -height * 0.5, 0, 16);
+    glOrtho(-window_width * 0.5, window_width * 0.5, window_height * 0.5,
+            -window_height * 0.5, 0, 16);
     glTranslated(center.x, center.y, 0);
     glScaled(scale * zoom, scale * zoom, 1);
     glTranslated(-content_box.lx - content_w * 0.5,
                  -content_box.ly - content_h * 0.5, 0);
-  }
 
-  void Render() {
     GvPolygonItem<double> polygon_item;
     GvCircleItem<double> circle_item;
     GvTextItem<double> text_item;
@@ -616,8 +703,38 @@ class GvCore {
         std::cerr << "Unknown command" << std::endl;
       }
     }
+    auto cur_index = vis_time_index + 1;
+    auto max_index = time_index.size();
     mtx.unlock();
+
+    double mousex, mousey;
+    MouseWorldPoint(&mousex, &mousey);
+
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glOrtho(-window_width * 0.5, window_width * 0.5, window_height * 0.5,
+            -window_height * 0.5, 0, 16);
+    RenderText(-window_width * 0.5, window_height * 0.5, 20, 1, 2,
+               ColorIndex(1), "Time(%d / %d) Mouse(%f, %f)", cur_index,
+               max_index, mousex, mousey);
+
     SDL_RenderPresent(renderer);
+  }
+
+  void MouseWorldPoint(double* x, double* y) {
+    int mousex, mousey;
+    SDL_GetMouseState(&mousex, &mousey);
+
+    double modelview[16];
+    double projection[16];
+    int viewport[4];
+    glGetDoublev(GL_MODELVIEW_MATRIX, modelview);
+    glGetDoublev(GL_PROJECTION_MATRIX, projection);
+    glGetIntegerv(GL_VIEWPORT, viewport);
+
+    double z;
+    gluUnProject(mousex, window_height - mousey, 0.0, modelview, projection,
+                 viewport, x, y, &z);
   }
 
   void MainLoop() {
@@ -642,14 +759,18 @@ class GvCore {
               break;
             case SDLK_RIGHT:
               if (vis_time_index + 1 < time_index.size()) {
+                mtx.lock();
                 vis_time_index++;
                 auto_mode_ = false;
+                mtx.unlock();
               }
               break;
             case SDLK_LEFT:
               if (vis_time_index - 1 >= 0) {
+                mtx.lock();
                 vis_time_index--;
                 auto_mode_ = false;
+                mtx.unlock();
               }
               break;
             case SDLK_ESCAPE:
@@ -671,13 +792,11 @@ class GvCore {
             } else {
               Zoom(-1);
             }
-            std::cerr << "A" << ev.wheel.y << std::endl;
           }
         }
       }
 
       FontCheck();
-      BeforeRender();
       Render();
     }
     SDL_Quit();
