@@ -523,11 +523,24 @@ class GvCore {
     return font != nullptr;
   }
 
-  void Zoom(int direction) {
+  void Zoom(int direction, bool think_mouse = false) {
     if (direction == 0) return;
-    zoom = zoom * std::pow(0.5, direction * 0.080482023721841);
-    zoom = std::min(std::max(zoom, 1.0), 10.0);
+    double ratio = std::pow(0.5, direction * 0.080482023721841);
+    double new_zoom = std::min(std::max(zoom * ratio, 1.0), 10.0);
+
+    center.x *= new_zoom / zoom;
+    center.y *= new_zoom / zoom;
+    zoom = new_zoom;
     UpdateCenter();
+
+    if (think_mouse) {
+      int mousex, mousey;
+      SDL_GetMouseState(&mousex, &mousey);
+      int sign = direction > 0 ? 1 : -1;
+      int dx = std::round(sign * 0.1 * ((mousex - window_width * 0.5)));
+      int dy = std::round(sign * 0.1 * ((mousey - window_height * 0.5)));
+      UpdateCenter(dx, dy);
+    }
   }
 
   void FlushLocked() {
@@ -788,9 +801,9 @@ class GvCore {
         if (ev.type == SDL_MOUSEWHEEL) {
           if (ev.wheel.direction == SDL_MOUSEWHEEL_NORMAL) {
             if (ev.wheel.y > 0) {
-              Zoom(1);
+              Zoom(1, true);
             } else {
-              Zoom(-1);
+              Zoom(-1, true);
             }
           }
         }
