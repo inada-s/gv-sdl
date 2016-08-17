@@ -113,6 +113,8 @@ template <class T>
 struct RenderArgs {
   SDL_Renderer* renderer;
   TTF_Font* font;
+  std::function<void(double, double, double, int, int, GvColor, const char*)>
+      render_text_func;
 };
 
 template <class T>
@@ -180,70 +182,25 @@ struct GvTextItem {
     r.Read(dst.text);
   }
 
-  T minx = 0, miny = 0, maxx = 0, maxy = 0;
+  T minx = std::numeric_limits<T>::max();
+  T miny = std::numeric_limits<T>::max();
+  T maxx = std::numeric_limits<T>::min();
+  T maxy = std::numeric_limits<T>::min();
+
   T MinX() const { return minx; }
   T MinY() const { return miny; }
   T MaxX() const { return maxx; }
   T MaxY() const { return maxy; }
 
   void Render(const RenderArgs<T>& r) {
-    // https://github.com/android/platform_frameworks_base/tree/master/data/fonts
-    SDL_Color col;
-    col.r = c.r;
-    col.g = c.g;
-    col.b = c.b;
-    col.a = c.a;
-
-    SDL_Surface* surface = TTF_RenderUTF8_Blended(r.font, text.c_str(), col);
-    if (surface == nullptr) return;
-    GLuint texId;
-    glGenTextures(1, &texId);
-    glBindTexture(GL_TEXTURE_2D, texId);
-
-    const int w = next_power_of_two(surface->w);
-    const int h = next_power_of_two(surface->h);
-
-    SDL_Surface* s = SDL_CreateRGBSurface(0, w, h, 32, 0x00ff0000, 0x0000ff00,
-                                          0x000000ff, 0xff000000);
-    SDL_Rect blit_rect;
-    blit_rect.x = blit_rect.y = 0;
-    blit_rect.w = surface->w;
-    blit_rect.h = surface->h;
-    SDL_Rect blit2_rect;
-    blit2_rect.x = (w - surface->w) / 2.0;
-    blit2_rect.y = (h - surface->h) / 2.0;
-    blit2_rect.w = surface->w;
-    blit2_rect.h = surface->h;
-
-    SDL_BlitSurface(surface, &blit_rect, s, &blit2_rect);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE,
-                 s->pixels);
-    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-
-    auto center = Point<double>(x, y);
-    double scale = this->r / surface->h;
-    double ux = center.x + (w * scale * 0.5);
-    double uy = center.y + (h * scale * 0.5);
-    double lx = center.x - (w * scale * 0.5);
-    double ly = center.y - (h * scale * 0.5);
-    glEnable(GL_TEXTURE_2D);
-    glBegin(GL_QUADS);
-    {
-      glTexCoord2d(0, 0);
-      glVertex2d(lx, ly);
-      glTexCoord2d(1, 0);
-      glVertex2d(ux, ly);
-      glTexCoord2d(1, 1);
-      glVertex2d(ux, uy);
-      glTexCoord2d(0, 1);
-      glVertex2d(lx, uy);
-    }
-    glEnd();
-    glDisable(GL_TEXTURE_2D);
-    SDL_FreeSurface(s);
-    SDL_FreeSurface(surface);
-    glDeleteTextures(1, &texId);
+    int w, h;
+    TTF_SizeText(r.font, text.c_str(), &w, &h);
+    double scale = this->r / h;
+    minx = std::round(this->x - w * scale * 0.5);
+    maxx = std::round(this->x + w * scale * 0.5);
+    miny = std::round(this->y - h * scale * 0.5);
+    maxy = std::round(this->y + h * scale * 0.5);
+    r.render_text_func(x, y, this->r, 0, 0, c, text.c_str());
   }
 };
 
@@ -662,6 +619,11 @@ class GvCore {
 
   void Render() {
     render_args.font = font;
+    render_args.render_text_func = std::bind(
+        &GvCore::RenderText, this, std::placeholders::_1, std::placeholders::_2,
+        std::placeholders::_3, std::placeholders::_4, std::placeholders::_5,
+        std::placeholders::_6, std::placeholders::_7);
+
     SDL_GetWindowSize(window, &window_width, &window_height);
 
     const auto content_w = content_box.ux - content_box.lx;
@@ -698,20 +660,20 @@ class GvCore {
         reader.Read(vis_time);
       } else if (cmd == 'p') {
         GvPolygonItem<double>::ReadFrom(reader, polygon_item);
-        content_box.Update(polygon_item);
         polygon_item.Render(render_args);
+        content_box.Update(polygon_item);
       } else if (cmd == 'c') {
         reader.Read(circle_item);
-        content_box.Update(circle_item);
         circle_item.Render(render_args);
+        content_box.Update(circle_item);
       } else if (cmd == 't') {
         GvTextItem<double>::ReadFrom(reader, text_item);
         if (font == nullptr) {
           std::cerr << "no font" << std::endl;
           continue;
         }
-        content_box.Update(text_item);
         text_item.Render(render_args);
+        content_box.Update(text_item);
       } else {
         std::cerr << "Unknown command" << std::endl;
       }
