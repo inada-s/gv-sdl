@@ -229,7 +229,7 @@ struct GvCircleItem {
   }
 };
 
-class GvCore {
+class GvSDL {
  public:
   GvColor Color(int8_t r = 0, uint8_t g = 0, uint8_t b = 0,
                 uint8_t a = 0xFF) const {
@@ -283,7 +283,7 @@ class GvCore {
     if (!enabled()) return;
     Init();
     initialized = true;
-    auto th = std::thread(&GvCore::MainLoop, this);
+    auto th = std::thread(&GvSDL::MainLoop, this);
     th.detach();
   }
 
@@ -637,7 +637,7 @@ class GvCore {
   void Render() {
     render_args.font = font;
     render_args.render_text_func = std::bind(
-        &GvCore::RenderText, this, std::placeholders::_1, std::placeholders::_2,
+        &GvSDL::RenderText, this, std::placeholders::_1, std::placeholders::_2,
         std::placeholders::_3, std::placeholders::_4, std::placeholders::_5,
         std::placeholders::_6, std::placeholders::_7);
 
@@ -794,6 +794,30 @@ class GvCore {
     SDL_Quit();
   }
 };
+
+struct GvEmpty {
+  GvColor Color(...) { return 0; }
+  GvColor ColorIndex(...) { return 0; }
+  void Flush(...) {}
+  void NewTime(...) {}
+  void RunMainThread(std::function<void()> f) { f(); }
+  void RunSubThread(...) {}
+  void Line(...) {}
+  void Circle(...) {}
+  void Rect(...) {}
+  void Text(...) {}
+  void Arrow(...) {}
+  void font_path(...) {}
+  std::string font_path() { return ""; }
+  void default_alpha(...) { return; }
+  uint8_t default_alpha() { return 0; }
+  bool enabled(...) { return false; }
+};
+
 }  // namespace gv_internal
 
-static gv_internal::GvCore gv;
+#ifndef DISABLE_GV
+static gv_internal::GvSDL gv;
+#else
+static gv_internal::GvEmpty gv;
+#endif
