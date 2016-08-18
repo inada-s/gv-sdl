@@ -251,12 +251,14 @@ class GvCore {
   }
 
   void Flush() {
+    if (!enabled()) return;
     mtx.lock();
     FlushLocked();
     mtx.unlock();
   }
 
   void NewTime() {
+    if (!enabled()) return;
     mtx.lock();
     FlushLocked();
     buffer.push_back('n');
@@ -266,6 +268,10 @@ class GvCore {
   }
 
   void RunMainThread(std::function<void()> f) {
+    if (!enabled()) {
+      f();
+      return;
+    }
     Init();
     initialized = true;
     auto th = std::thread(f);
@@ -274,6 +280,7 @@ class GvCore {
   }
 
   void RunSubThread() {
+    if (!enabled()) return;
     Init();
     initialized = true;
     auto th = std::thread(&GvCore::MainLoop, this);
@@ -282,6 +289,7 @@ class GvCore {
 
   void Line(double x1, double y1, double x2, double y2, double r,
             GvColor color) {
+    if (!enabled()) return;
     constexpr double sqrt2 = 1.41421356237;
     const double odx = x2 - x1;
     const double ody = y2 - y1;
@@ -312,6 +320,7 @@ class GvCore {
   }
 
   void Circle(double x, double y, double r, bool filled, GvColor color) {
+    if (!enabled()) return;
     GvCircleItem<double> item;
     item.p.x = x;
     item.p.y = y;
@@ -323,6 +332,7 @@ class GvCore {
   }
 
   void Rect(double x, double y, double w, double h, GvColor color) {
+    if (!enabled()) return;
     GvPolygonItem<double> item;
     item.vx.push_back(x);
     item.vx.push_back(x);
@@ -340,6 +350,7 @@ class GvCore {
 
   void Text(double x, double y, double r, GvColor color,
             const char* format = "?", ...) {
+    if (!enabled()) return;
     char buf[256];
     va_list arg;
     va_start(arg, format);
@@ -359,6 +370,7 @@ class GvCore {
 
   void Arrow(double x1, double y1, double x2, double y2, double r,
              GvColor color) {
+    if (!enabled()) return;
     constexpr double sqrt2 = 1.41421356237;
     constexpr double sinA = 0.2588190451;   // sin(M_PI * 15 / 180);
     constexpr double cosA = 0.96592582628;  // cos(M_PI * 15 / 180);
@@ -421,6 +433,9 @@ class GvCore {
   void default_alpha(uint8_t a) { default_alpha_ = a; }
   uint8_t default_alpha() const { return default_alpha_; }
 
+  bool enabled() const { return enabled_; }
+  void enabled(bool b) { enabled_ = b; }
+
  private:
   std::mutex mtx;
   std::vector<char> commands;
@@ -430,6 +445,7 @@ class GvCore {
   double buffer_time = 0;
 
   bool initialized = false;
+  bool enabled_ = true;
   SDL_Window* window = nullptr;
   SDL_Renderer* renderer = nullptr;
   TTF_Font* font = nullptr;
@@ -443,6 +459,7 @@ class GvCore {
   int window_width, window_height;
 
   void Init() {
+    if (!enabled()) return;
     if (initialized) return;
     mtx.lock();
     buffer_time = 0;
