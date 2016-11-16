@@ -1,3 +1,15 @@
+/*
+ The MIT License (MIT)
+ Copyright (c) 2016 Shingo INADA
+ https://opensource.org/licenses/mit-license.php
+
+ This library is based on the following project.
+ https://github.com/colun/gvc
+ The MIT License (MIT)
+ Copyright (c) 2015 colun ( Yasunobu Imamura )
+ https://opensource.org/licenses/mit-license.php
+*/
+
 #pragma once
 
 #ifdef ENABLE_GV

@@ -1,10 +1,16 @@
+/*
+ The MIT License (MIT)
+ Copyright (c) 2016 Shingo INADA
+ https://opensource.org/licenses/mit-license.php
+*/
+
 #include <chrono>
 #include <iostream>
 #include <thread>
 #include "gv.hpp"
 using namespace std;
 
-int main(int, char** const) {
+int main() {
   gv.RunMainThread([] {
     gv.font_path("MTLmr3m.ttf");
     while (true) {
