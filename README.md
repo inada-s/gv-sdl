@@ -14,6 +14,7 @@ gv.hpp をビジュアライズを行いたいプロジェクトにコピーし�
 - OpenGL
 - [SDL2](https://www.libsdl.org/)
 - [SDL_ttf 2](https://www.libsdl.org/projects/SDL_ttf/)
+- 適当なttfフォント
 
 # ビルド
 ## MacOSX command line
