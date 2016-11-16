@@ -6,8 +6,7 @@ using namespace std;
 
 int main(int, char** const) {
   gv.RunMainThread([] {
-    //  gv.font_path("/Users/shingo/projects/gv-sdl/Inconsolata-Regular.ttf");
-    gv.font_path("/Users/shingo/projects/gv-sdl/MTLmr3m.ttf");
+    gv.font_path("MTLmr3m.ttf");
     while (true) {
       for (int i = 0; i < 100; ++i) {
         gv.NewTime();

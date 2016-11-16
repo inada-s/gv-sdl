@@ -1,5 +1,6 @@
 #pragma once
 
+#ifdef ENABLE_GV
 #include <GL/glu.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_opengl.h>
@@ -17,10 +18,11 @@
 #include <string>
 #include <thread>
 #include <vector>
+#endif
 
 namespace gv_internal {
 
-inline unsigned next_power_of_two(unsigned v) {
+static inline unsigned next_power_of_two(unsigned v) {
   assert(v > 0);
   v--;
   v |= v >> 1;
@@ -41,6 +43,7 @@ struct GvColor {
       : r(r), g(g), b(b), a(a) {}
 };
 
+#ifdef ENABLE_GV
 template <class T>
 struct Point {
   T x, y;
@@ -636,10 +639,11 @@ class GvSDL {
 
   void Render() {
     render_args.font = font;
-    render_args.render_text_func = std::bind(
-        &GvSDL::RenderText, this, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4, std::placeholders::_5,
-        std::placeholders::_6, std::placeholders::_7);
+    render_args.render_text_func = [this](double x, double y, double r,
+                                          int align_h, int align_v, GvColor c,
+                                          const char* text) {
+      this->RenderText(x, y, r, align_h, align_v, c, text);
+    };
 
     SDL_GetWindowSize(window, &window_width, &window_height);
 
@@ -665,34 +669,36 @@ class GvSDL {
 
     double vis_time = 0;
     mtx.lock();
-    BinaryReader reader(commands, time_index[vis_time_index]);
-    bool visit_t = false;
-    while (reader.pos() < commands.size()) {
-      char cmd;
-      reader.Read(cmd);
-      if (cmd == 'n' && visit_t) {
-        break;
-      } else if (cmd == 'n') {
-        visit_t = true;
-        reader.Read(vis_time);
-      } else if (cmd == 'p') {
-        GvPolygonItem<double>::ReadFrom(reader, polygon_item);
-        polygon_item.Render(render_args);
-        content_box.Update(polygon_item);
-      } else if (cmd == 'c') {
-        reader.Read(circle_item);
-        circle_item.Render(render_args);
-        content_box.Update(circle_item);
-      } else if (cmd == 't') {
-        GvTextItem<double>::ReadFrom(reader, text_item);
-        if (font == nullptr) {
-          std::cerr << "no font" << std::endl;
-          continue;
+    if (!time_index.empty()) {
+      BinaryReader reader(commands, time_index[vis_time_index]);
+      bool visit_t = false;
+      while (reader.pos() < commands.size()) {
+        char cmd;
+        reader.Read(cmd);
+        if (cmd == 'n' && visit_t) {
+          break;
+        } else if (cmd == 'n') {
+          visit_t = true;
+          reader.Read(vis_time);
+        } else if (cmd == 'p') {
+          GvPolygonItem<double>::ReadFrom(reader, polygon_item);
+          polygon_item.Render(render_args);
+          content_box.Update(polygon_item);
+        } else if (cmd == 'c') {
+          reader.Read(circle_item);
+          circle_item.Render(render_args);
+          content_box.Update(circle_item);
+        } else if (cmd == 't') {
+          GvTextItem<double>::ReadFrom(reader, text_item);
+          if (font == nullptr) {
+            std::cerr << "no font" << std::endl;
+            continue;
+          }
+          text_item.Render(render_args);
+          content_box.Update(text_item);
+        } else {
+          std::cerr << "Unknown command" << std::endl;
         }
-        text_item.Render(render_args);
-        content_box.Update(text_item);
-      } else {
-        std::cerr << "Unknown command" << std::endl;
       }
     }
     auto cur_index = vis_time_index + 1;
@@ -794,6 +800,7 @@ class GvSDL {
     SDL_Quit();
   }
 };
+#endif
 
 struct GvEmpty {
   GvColor Color(...) { return 0; }
@@ -816,7 +823,7 @@ struct GvEmpty {
 
 }  // namespace gv_internal
 
-#ifndef DISABLE_GV
+#ifdef ENABLE_GV
 static gv_internal::GvSDL gv;
 #else
 static gv_internal::GvEmpty gv;
