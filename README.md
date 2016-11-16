@@ -41,5 +41,5 @@ g++ -std=c++11 -DENABLE_GV $(sdl2-config --cflags --libs) -lSDL2_ttf -framework 
 - `gv.Line(double x1, double y1, double x2, double y2, double r, GvColor color)` (x1,y1)から(x2,y2)に線を引きます.
 - `gv.Arrow(double x1, double y1, double x2, double y2, double r, GvColor color)` (x1,y1)から(x2,y2)矢印付きの線を引きます.
 - `gv.Rect(double x, double y, double w, double h, GvColor color)` (x,y)を左上して 幅w 高さh の四角形を描きます.
-- `gv.Circle(double x, double y, double r, bool filled, GvColor color)` (x,y)を中心いして半径rの円を描きます.
+- `gv.Circle(double x, double y, double r, GvColor color)` (x,y)を中心いして半径rの円を描きます.
 - `gv.Text(double x, double y, double r, GvColor color, const char* format = "?", ...)` (x,y)を中心に大きさrの文字を描きます.
