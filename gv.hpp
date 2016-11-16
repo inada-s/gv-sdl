@@ -334,7 +334,7 @@ class GvSDL {
     item.WriteTo(w);
   }
 
-  void Circle(double x, double y, double r, bool filled, GvColor color) {
+  void Circle(double x, double y, double r, GvColor color) {
     if (!enabled()) return;
     GvCircleItem<double> item;
     item.p.x = x;

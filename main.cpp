@@ -33,7 +33,7 @@ int main() {
         gv.default_alpha(128);
         gv.Arrow(1 * i, 10, 200 + 1 * i, 200, 10, gv.ColorIndex(0));
         gv.Line(200 - 1 * i, 10, 10, 200, 10, gv.ColorIndex(9));
-        gv.Circle(100, 100, 100, false, gv.ColorIndex(2));
+        gv.Circle(100, 100, 100, gv.ColorIndex(2));
         gv.Rect(150, 150, i * 20, i * 10, gv.Color(255, 128, 128, 128));
         gv.Flush();
         // cout << "hello" << i << endl;
